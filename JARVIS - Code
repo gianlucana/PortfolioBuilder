@@ -1,0 +1,343 @@
+##### PROJECT: PORTFOLIO BUILDER #####
+
+# Aprile Guglielmo, Nardo Gianluca, Walter Jonathan
+
+
+
+# importing libraries needed
+import numpy as np
+import pandas as pd
+import pandas_datareader.data as web
+
+### CREATING EXCEL FILE
+# we previously created an excel file importing from an internet stock screener (zacks.com)
+# this file has the list of the first 100 companies for each sector (ordered by market cap)
+# for each company we have the company name, the ticker and the sector
+
+### IMPORTING DATA
+# import companies dataset document and converting it in pandas dataframe
+df = pd.read_excel(r'C:\Users\Gianluca Nardo\Desktop\FINTECH\Courses\Information Technology\Project - PF creator\Dataset\Sectors Tickers - Single sheet.xlsx')
+
+# creating list of all company names
+company_names_list = df['Company Name'].tolist()
+company_names_list = [x.encode('ascii') for x in company_names_list]
+
+# creating list of all tickers
+ticker_list = df['Ticker'].tolist()
+ticker_list = [x.encode('ascii') for x in ticker_list]
+
+# creating of all sectors
+sectors = df['Sector'].tolist()
+sectors = [x.encode('ascii') for x in sectors]
+sectors = set(sectors)
+sectors = [z.lower() for z in sectors]
+
+### EXCTRACTING CUSTUMERS' REQUESTS
+# asking questions to collect clients' requests (with NPL)
+
+# Jarvis introduction
+ready = raw_input("Hello Sir/Madame, my name is Jarvis and I'm your AI digital assistant.\n"
+                         "From now on, I'll help you building the best stock portfolio based on your request,\n"
+                         "your interests and your financial resources.\n"
+                         "Are you ready? (yes/no)")
+
+if ready == "yes":
+    answer = "Alright, let's begin!"
+else:
+    answer = "..."
+print answer
+
+# sectors selection
+answer_sectors = raw_input('In which sectors are you most interested?\n'
+                       'Medical, Oils-Energy, Transportation, Auto-Tires-Trucks,Business Services, Consumer Discretionary,\n'
+                       'Utilities, Consumer Staples, Industrial Products,Retail-Wholesale, Construction, Aerospace,\n'
+                       'Basic Materials, Conglomerates, Finance\n')
+names_sectors = {'Medical': ("med", "medicine", "pharmaceutical", "pharma","medical"),
+'Oils-Energy': ("oils","oil", "energy","oils-energy"),
+'Transportation': ("transport","transportation"),
+'Auto-Tires-Trucks': ("auto-tires-trucks","auto","tires","trucks","car","cars","automotive"),
+'Business Services':("business services", "business"),
+'Consumer Discretionary':("discretionary","consumer dicretionary"),
+'Utilities':("utilities","utility"),
+'Consumer Staples': ("staples","consumer staples"),
+'Industrial Products':("industrial products", "industrial"),
+'Retail-Wholesale':("retail-wholesale", "retail","wholesale"),
+'Construction':("construction", "building","constructions","buildings"),
+'Aerospace':("aerospace", "space"),
+'Basic Materials':("basic materials", "material","materials"),
+'Conglomerates':("conglomerate", "holding","conglomerates","holdings"),
+'Finance':("finance","fintech","financial")}
+list1 = answer_sectors.split()
+list1 = [x.strip(",") for x in list1]
+list1 = [x.lower() for x in list1]
+sectors_selected = list(set([k for i in list1 for k in names_sectors if i in names_sectors[k]]))
+sectors = sectors_selected
+
+# sectors' weights selection
+answer_weights = raw_input("Do you have any preferences in the partition of the sectors selected above? (yes/no)\n")
+sectors_weights = []
+if answer_weights == "yes":
+    print "Please now write below the sector the preferred % :"
+    for i in range(len(sectors_selected)):
+        ans_weights = raw_input(sectors_selected[i])
+        sectors_weights.append(ans_weights.strip("%"))
+sectors_weights = [float(i)/100 for i in sectors_weights]
+
+# amount of money to be invested
+answer_capital = raw_input('How much do you want to invest? ($)\n')
+list1 = answer_capital.split()
+list1 = [x.strip("$") for x in list1]
+digit_list = [i for i in list1 if i.isdigit() == True]
+capital_selected = digit_list[0]
+
+# investment span
+answer_period = raw_input('How long do you want to have your money invested?\n')
+list1 = answer_period.split()
+list1 = [x.strip(",") for x in list1]
+digit_list = [i for i in list1 if i.isdigit() == True]
+answer = digit_list[0], list1[list1.index(digit_list[0])+1]
+if answer[1] == "year" or answer[1] == "years":
+    period_selected = int(answer[0])*12
+else:
+    period_selected = answer[0]
+
+# specific companies selection
+answer_tickers = raw_input('Are there any particular companies you want to invest on?\n')
+my_list = answer_tickers.split()
+my_list = [x.lower() for x in my_list if len(x)>3 and x != 'stock' and x != 'stocks']
+splitted_company_names = [x.split() for x in company_names_list]
+company_names_dict = dict((ticker_list[i], splitted_company_names[i]) for i in range(len(ticker_list)))
+companies_selected = []
+for i in my_list:
+    for x in ticker_list:
+        for z in company_names_dict[x]:
+            z = z.strip(",")
+            i = i.strip(",")
+            if i == z.lower():
+                companies_selected.append(x)
+companies_selected = set(companies_selected)
+
+# selecting the nr of companies for each sector we want to consider
+# we selected 2 in order to speed up the computational time
+# fill in a nr of your choice (1-50)
+companies_considered = 2
+
+### COMPUTING BEST EFFICIENT PFs
+
+## here we created a dictionary with an efficient portfolio for each sector
+
+# extract ticker for each sector
+ticker_matrix = [(list(df[df['Sector'] == i]['Ticker'])) for i in sectors]
+
+# encoding it
+ticker_matrix = [[item.encode('utf-8') for item in y] for y in ticker_matrix]
+
+# create dictionary for all the sectors
+sectors_tickers = dict((list(sectors)[i], ticker_matrix[i]) for i in range(len(sectors)))
+
+# create a dataset of prices for each sector with a dictionary
+data={}
+for s in sectors:
+    data[s] = web.DataReader(sectors_tickers[s][:companies_considered], data_source='yahoo', start='01/01/2014')['Adj Close']
+    data[s].sort_index(inplace=True)
+
+# creating dictionary to save best pf for each sector
+efficient_pf = {}
+min_vol_pf = {}
+
+# Creating efficient pf for each sector to use in the Model 3
+# here we used an already existing code (from line 143 to 188) which allowed us to compute the most efficient portfolio
+# we modified this code adapting it to our needs
+for l in sectors:
+
+    # convert daily stock prices into daily returns
+    returns = data[l].pct_change()
+
+    # calculate mean daily return and covariance of daily returns
+    mean_daily_returns = returns.mean()
+    cov_matrix = returns.cov()
+
+    #set number of runs of random portfolio weights
+    num_portfolios = 25000
+
+    # set up array to hold results
+    # We have increased the size of the array to hold the weight values for each stock
+    results = np.zeros((4 + len(sectors_tickers[l][:companies_considered]) - 1, num_portfolios))
+    for i in xrange(num_portfolios):
+    # select random weights for portfolio holdings
+        weights = np.array(np.random.random(companies_considered))
+    # rebalance weights to sum to 1
+        weights /= np.sum(weights)
+
+    # calculate portfolio return and volatility
+        portfolio_return = np.sum(mean_daily_returns * weights) * 252
+        portfolio_std_dev = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights))) * np.sqrt(252)
+
+    # store results in results array
+        results[0, i] = portfolio_return
+        results[1, i] = portfolio_std_dev
+
+    # store Sharpe Ratio (return / volatility) - risk free rate element excluded for simplicity
+        results[2, i] = results[0, i] / results[1, i]
+
+        # iterate through the weight vector and add data to results array
+        for j in range(len(weights)):
+            results[j + 3, i] = weights[j]
+
+    # convert results array to Pandas DataFrame
+    column_names = ['ret', 'stdev', 'sharpe'] + [sectors_tickers[l][w] for w in range(companies_considered)]
+    results_frame = pd.DataFrame(results.T, columns=column_names)
+
+    # locate position of portfolio with highest Sharpe Ratio
+    efficient_pf[l] = results_frame.iloc[results_frame['sharpe'].idxmax()]
+
+    # locate positon of portfolio with minimum standard deviation
+    min_vol_pf[l] = results_frame.iloc[results_frame['stdev'].idxmin()]
+    column_names = []
+
+#creating the final list of PF tickers
+final_ticker_list1 = [efficient_pf[k].index[3:].tolist() for k in sectors_selected]
+final_ticker_list1 = [j for i in final_ticker_list1 for j in i]
+companies_selected = [x for x in companies_selected if x not in final_ticker_list1]
+
+# we kept these lists separate in order to use final_ticker_list1 as the input for the Model 3
+# we need to do this separation because in the last model we did not consider the specific companies the client asked
+# final_ticker_list used for model 1 and 2, final_ticker_list1 used for model 3
+final_ticker_list = final_ticker_list1 + companies_selected
+
+# re-inizializing some counters
+x = 0
+j = 0
+i = 0
+l = 0
+
+# importing historical prices for this companies
+data_f = web.DataReader(final_ticker_list, data_source='yahoo', start='01/01/2014')['Adj Close']
+data_f.sort_index(inplace=True)
+
+### Computing the most efficient PF considering these companies (Model 1 and 2)
+# convert daily stock prices into daily returns
+returns = data_f.pct_change()
+
+# calculate mean daily return and covariance of daily returns
+mean_daily_returns = returns.mean()
+cov_matrix = returns.cov()
+
+# set number of runs of random portfolio weights
+num_portfolios = 25000
+
+# set up array to hold results
+# We have increased the size of the array to hold the weight values for each stock
+results = np.zeros((4 + len(final_ticker_list) - 1, num_portfolios))
+for i in xrange(num_portfolios):
+# select random weights for portfolio holdings
+    weights = np.array(np.random.random(len(final_ticker_list)))
+# rebalance weights to sum to 1
+    weights /= np.sum(weights)
+
+# calculate portfolio return and volatility
+    portfolio_return = np.sum(mean_daily_returns * weights) * 252
+    portfolio_std_dev = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights))) * np.sqrt(252)
+
+# store results in results array
+    results[0, i] = portfolio_return
+    results[1, i] = portfolio_std_dev
+
+# store Sharpe Ratio (return / volatility) - risk free rate element excluded for simplicity
+    results[2, i] = results[0, i] / results[1, i]
+
+    # iterate through the weight vector and add data to results array
+    for j in range(len(weights)):
+        results[j + 3, i] = weights[j]
+
+# convert results array to Pandas DataFrame
+column_names = ['ret', 'stdev', 'sharpe'] + final_ticker_list
+results_frame = pd.DataFrame(results.T, columns=column_names)
+
+# locate position of portfolio with highest Sharpe Ratio
+final_efficient_pf = results_frame.iloc[results_frame['sharpe'].idxmax()]
+
+# locate positon of portfolio with minimum standard deviation
+final_min_vol_pf = results_frame.iloc[results_frame['stdev'].idxmin()]
+
+### Computing the model 3
+### Creating PF considering the client's preferred weights (Model 3)
+
+# creating a dictionary combining selected sectors and selected weights
+sectors_weights_dict = dict((list(sectors)[i], sectors_weights[i]) for i in range(len(sectors)))
+
+# creating ticker list with the companies to consider
+final_weights_list = [efficient_pf[k][3:].values*sectors_weights_dict[k] for k in sectors_selected]
+final_weights_list = [j for i in final_weights_list for j in i]
+
+# importing historical prices for this companies
+data_f = web.DataReader(final_ticker_list1, data_source='yahoo', start='01/01/2014')['Adj Close']
+data_f.sort_index(inplace=True)
+
+# convert daily stock prices into daily returns
+returns = data_f.pct_change()
+
+# calculate mean daily return and covariance of daily returns
+mean_daily_returns = returns.mean()
+cov_matrix = returns.cov()
+
+#set number of runs of random portfolio weights
+num_portfolios = 1
+
+# set up array to hold results
+# We have increased the size of the array to hold the weight values for each stock
+results = np.zeros((4 + len(final_ticker_list1) - 1, num_portfolios))
+for i in xrange(num_portfolios):
+# select random weights for portfolio holdings
+    weights = np.asarray(final_weights_list)
+# rebalance weights to sum to 1
+    weights /= np.sum(weights)
+
+# calculate portfolio return and volatility
+    portfolio_return = np.sum(mean_daily_returns * weights) * 252
+    portfolio_std_dev = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights))) * np.sqrt(252)
+
+# store results in results array
+    results[0, i] = portfolio_return
+    results[1, i] = portfolio_std_dev
+
+# store Sharpe Ratio (return / volatility) - risk free rate element excluded for simplicity
+    results[2, i] = results[0, i] / results[1, i]
+
+    # iterate through the weight vector and add data to results array
+    for j in range(len(weights)):
+        results[j + 3, i] = weights[j]
+
+# convert results array to Pandas DataFrame
+column_names = ['ret', 'stdev', 'sharpe'] + final_ticker_list1
+results_frame = pd.DataFrame(results.T, columns=column_names)
+
+# locate position of portfolio with highest Sharpe Ratio
+final_custom_pf = results_frame.iloc[results_frame['sharpe'].idxmax()]
+
+### Showing the output
+
+# creating a function that gives the expected return given the model considered
+def exp_ret(pf):
+    exp_ret = int(capital_selected)*(((round(pf[0], ndigits=3))*period_selected/12))
+    return exp_ret
+
+# printing the results
+print "According to your requests, we were able to create 3 different portfolios:\n" \
+      "the first one being the most efficient, the second one least volatile and last one with your partition choices.\n" \
+      "MOST EFFICIENT: has an estimate annual return of ",round(final_efficient_pf[0]*100, ndigits=3),"%.\n" \
+    "Given the invested capital (",capital_selected,"$) it translates to a profit of",exp_ret(final_efficient_pf),"$ in",period_selected,"months.\n" \
+    "Here you can find more informations about the composition of your portfolio:\n", \
+      final_efficient_pf, "\n"\
+    "LEAST VOLATILE: has an estimate annual return of ",round(final_min_vol_pf[0]*100, ndigits=3),"%.\n" \
+    "Given the invested capital (",capital_selected,"$) it translates to a profit of",exp_ret(final_min_vol_pf),"$ in",period_selected,"months.\n" \
+    "Here you can find more informations about the composition of your portfolio:\n",\
+      final_min_vol_pf, "\n"\
+    "PERSONALIZED PF: has an estimate annual return of ",round(final_custom_pf[0]*100, ndigits=3),"%.\n" \
+    "Given the invested capital (",capital_selected,"$) it translates to a profit of",exp_ret(final_custom_pf),"$ in",period_selected,"months.\n" \
+    "Here you can find more informations about the composition of your portfolio:\n", \
+      final_custom_pf,
+
+
+
+
